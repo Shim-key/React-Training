@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewpoint" content="width=device-width, initial-scale=1.0" />
+  <title>Simple React19 App No JSX by SDN</title>
+  <script type="module">
+    import React from
+      "http://esm.sh/react@19.0.0-rc-14a4699f-20240725"
+    import ReactDOMClient from
+      "http://esm.sh/react-dom@19.0.0-rc-14a4699f-20240725/client"
+
+    const root = document.getElementById('root');
+    const rootElement = ReactDOMClient.createRoot(root);
+    const element = React.createElement('p', {}, "Welcome to React-World!!!!!");
+    rootElement.render(element);
+  </script>
+</head>
+<body>
+  <h1>React</h1>
+  <div id="root">wait...</div>
+</body>
+</html>
