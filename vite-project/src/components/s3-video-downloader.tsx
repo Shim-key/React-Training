@@ -1,5 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, Play, Pause, RotateCcw, ChevronLeft, ChevronRight, FileVideo, Search, Grid, List } from 'lucide-react';
+import { Download, FileVideo, Search, Grid, List } from 'lucide-react';
+import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
+import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 interface VideoFile {
   name: string;
@@ -7,6 +9,7 @@ interface VideoFile {
   size?: string;
   lastModified?: string;
 }
+
 
 interface ThumbnailProps {
   videoUrl: string;
@@ -30,16 +33,14 @@ const ThumbnailGenerator: React.FC<ThumbnailProps> = ({ videoUrl, onThumbnailsGe
       
       video.onloadedmetadata = () => {
         const duration = video.duration;
-        const intervals = [0.1, 0.3, 0.5, 0.7, 0.9]; // 10%, 30%, 50%, 70%, 90%
-        
+        const intervals = [0.1, 0.3, 0.5, 0.7, 0.9];
         let currentIndex = 0;
-        
+
         const captureFrame = () => {
           if (currentIndex >= intervals.length) {
             onThumbnailsGenerated(thumbnails);
             return;
           }
-          
           video.currentTime = duration * intervals[currentIndex];
         };
 
@@ -49,14 +50,12 @@ const ThumbnailGenerator: React.FC<ThumbnailProps> = ({ videoUrl, onThumbnailsGe
           ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
           thumbnails.push(canvas.toDataURL('image/jpeg', 0.7));
           currentIndex++;
-          
           if (currentIndex < intervals.length) {
             video.currentTime = duration * intervals[currentIndex];
           } else {
             onThumbnailsGenerated(thumbnails);
           }
         };
-        
         captureFrame();
       };
     };
@@ -81,12 +80,9 @@ const VideoCard: React.FC<{
   const [currentThumbnail, setCurrentThumbnail] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
 
-  const handleThumbnailsGenerated = (newThumbnails: string[]) => {
-    setThumbnails(newThumbnails);
-  };
-
+  // サムネイル自動切り替え
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     if (isHovered && thumbnails.length > 1) {
       interval = setInterval(() => {
         setCurrentThumbnail((prev) => (prev + 1) % thumbnails.length);
@@ -94,6 +90,10 @@ const VideoCard: React.FC<{
     }
     return () => clearInterval(interval);
   }, [isHovered, thumbnails.length]);
+
+  const handleThumbnailsGenerated = (newThumbnails: string[]) => {
+    setThumbnails(newThumbnails);
+  };
 
   if (viewMode === 'list') {
     return (
@@ -222,39 +222,79 @@ const VideoCard: React.FC<{
 };
 
 const S3VideoDownloader: React.FC = () => {
-  const [videos, setVideos] = useState<VideoFile[]>([
-    {
-      name: "sample_video_1.mp4",
-      url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-      size: "158 MB",
-      lastModified: "2024-01-15"
-    },
-    {
-      name: "sample_video_2.mp4", 
-      url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-      size: "245 MB",
-      lastModified: "2024-01-10"
-    },
-    {
-      name: "sample_video_3.mp4",
-      url: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-      size: "112 MB", 
-      lastModified: "2024-01-08"
-    }
-  ]);
-  
+  const [password, setPassword] = useState('');
+  const [videos, setVideos] = useState<VideoFile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
+  // S3から動画リスト取得
+ const fetchFiles = async (pwd: string) => {
+  setIsLoading(true);
+  setError(null);
+  try {
+    const client = new S3Client({
+      region: import.meta.env.VITE_AWS_REGION,
+      credentials: {
+        accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
+        secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY
+      }
+    });
+    const command = new ListObjectsV2Command({
+      Bucket: import.meta.env.VITE_AWS_BUCKET_NAME,
+      Prefix: `${pwd}/`
+    });
+    const response = await client.send(command);
+    const files = response.Contents?.filter(obj => obj.Key && obj.Key !== `${pwd}/`) || [];
+
+    // 署名付きURLを生成
+    const videoFiles: VideoFile[] = await Promise.all(
+      files.map(async obj => {
+        const key = obj.Key!;
+        const getObjectCommand = new GetObjectCommand({
+          Bucket: import.meta.env.VITE_AWS_BUCKET_NAME,
+          Key: key
+        });
+        const url = await getSignedUrl(client, getObjectCommand, { expiresIn: 3600 });
+        return {
+          name: key.replace(`${pwd}/`, ''),
+          url,
+          size: obj.Size ? `${(obj.Size / (1024 * 1024)).toFixed(1)} MB` : undefined,
+          lastModified: obj.LastModified?.toISOString().slice(0, 10)
+        };
+      })
+    );
+    setVideos(videoFiles);
+  } catch (err) {
+    setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
+    setVideos([]);
+  } finally {
+    setIsLoading(false);
+  }
+};
+
+  // パスワード入力時にS3から動画リスト取得
+  useEffect(() => {
+    if (password) {
+      fetchFiles(password);
+    } else {
+      setVideos([]);
+    }
+    // eslint-disable-next-line
+  }, [password]);
+
+  // 検索
   const filteredVideos = videos.filter(video =>
     video.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  // S3から動画をダウンロード
   const handleDownload = async (video: VideoFile) => {
     try {
       setIsLoading(true);
       const response = await fetch(video.url);
+      if (!response.ok) throw new Error('ファイルの取得に失敗しました');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -288,6 +328,14 @@ const S3VideoDownloader: React.FC = () => {
             </div>
             
             <div className="flex items-center gap-4">
+              {/* パスワード入力欄 */}
+              <input
+                type="password"
+                placeholder="パスワードを入力"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                className="pl-4 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
+              />
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 w-4 h-4" />
                 <input
@@ -296,6 +344,7 @@ const S3VideoDownloader: React.FC = () => {
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
+                  disabled={!password}
                 />
               </div>
               
@@ -307,6 +356,7 @@ const S3VideoDownloader: React.FC = () => {
                       ? 'bg-purple-500 text-white' 
                       : 'text-white/60 hover:text-white hover:bg-white/10'
                   }`}
+                  disabled={!password}
                 >
                   <Grid className="w-4 h-4" />
                 </button>
@@ -317,6 +367,7 @@ const S3VideoDownloader: React.FC = () => {
                       ? 'bg-purple-500 text-white' 
                       : 'text-white/60 hover:text-white hover:bg-white/10'
                   }`}
+                  disabled={!password}
                 >
                   <List className="w-4 h-4" />
                 </button>
@@ -328,7 +379,21 @@ const S3VideoDownloader: React.FC = () => {
 
       {/* Content */}
       <div className="max-w-6xl mx-auto px-6 py-8">
-        {filteredVideos.length === 0 ? (
+        {!password ? (
+          <div className="text-center py-12">
+            <FileVideo className="w-16 h-16 text-white/40 mx-auto mb-4" />
+            <h3 className="text-xl font-medium text-white/80 mb-2">
+              パスワードを入力してください
+            </h3>
+          </div>
+        ) : error ? (
+          <div className="text-center py-12">
+            <FileVideo className="w-16 h-16 text-white/40 mx-auto mb-4" />
+            <h3 className="text-xl font-medium text-white/80 mb-2">
+              エラー: {error}
+            </h3>
+          </div>
+        ) : filteredVideos.length === 0 ? (
           <div className="text-center py-12">
             <FileVideo className="w-16 h-16 text-white/40 mx-auto mb-4" />
             <h3 className="text-xl font-medium text-white/80 mb-2">
@@ -360,7 +425,11 @@ const S3VideoDownloader: React.FC = () => {
               {filteredVideos.map((video, index) => (
                 <VideoCard
                   key={index}
-                  video={video}
+                  video={{
+                    ...video,
+                    // S3の動画URLはダウンロード時に取得するため空文字
+                    url: video.url
+                  }}
                   onDownload={handleDownload}
                   viewMode={viewMode}
                 />
@@ -371,6 +440,6 @@ const S3VideoDownloader: React.FC = () => {
       </div>
     </div>
   );
-};
+  };
 
 export default S3VideoDownloader;
