@@ -1,227 +1,10 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { Download, FileVideo, Search, Grid, List } from 'lucide-react';
-import { S3Client, ListObjectsV2Command, GetObjectCommand } from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import React, { useState, useEffect } from 'react';
+import { FileVideo, Search, Grid, List } from 'lucide-react';
+import { VideoFile } from './interface';
+import { VideoCard } from './VideoCard';
+import { fetchFiles } from './fetchFiles';
 
-interface VideoFile {
-  name: string;
-  url: string;
-  size?: string;
-  lastModified?: string;
-}
-
-
-interface ThumbnailProps {
-  videoUrl: string;
-  onThumbnailsGenerated: (thumbnails: string[]) => void;
-}
-
-const ThumbnailGenerator: React.FC<ThumbnailProps> = ({ videoUrl, onThumbnailsGenerated }) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const generateThumbnails = async () => {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || !canvas) return;
-
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      const thumbnails: string[] = [];
-      
-      video.onloadedmetadata = () => {
-        const duration = video.duration;
-        const intervals = [0.1, 0.3, 0.5, 0.7, 0.9];
-        let currentIndex = 0;
-
-        const captureFrame = () => {
-          if (currentIndex >= intervals.length) {
-            onThumbnailsGenerated(thumbnails);
-            return;
-          }
-          video.currentTime = duration * intervals[currentIndex];
-        };
-
-        video.onseeked = () => {
-          canvas.width = 160;
-          canvas.height = 90;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          thumbnails.push(canvas.toDataURL('image/jpeg', 0.7));
-          currentIndex++;
-          if (currentIndex < intervals.length) {
-            video.currentTime = duration * intervals[currentIndex];
-          } else {
-            onThumbnailsGenerated(thumbnails);
-          }
-        };
-        captureFrame();
-      };
-    };
-
-    generateThumbnails();
-  }, [videoUrl, onThumbnailsGenerated]);
-
-  return (
-    <div className="hidden">
-      <video ref={videoRef} src={videoUrl} crossOrigin="anonymous" />
-      <canvas ref={canvasRef} />
-    </div>
-  );
-};
-
-const VideoCard: React.FC<{
-  video: VideoFile;
-  onDownload: (video: VideoFile) => void;
-  viewMode: 'grid' | 'list';
-}> = ({ video, onDownload, viewMode }) => {
-  const [thumbnails, setThumbnails] = useState<string[]>([]);
-  const [currentThumbnail, setCurrentThumbnail] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
-
-  // サムネイル自動切り替え
-  useEffect(() => {
-    let interval: ReturnType<typeof setInterval>;
-    if (isHovered && thumbnails.length > 1) {
-      interval = setInterval(() => {
-        setCurrentThumbnail((prev) => (prev + 1) % thumbnails.length);
-      }, 800);
-    }
-    return () => clearInterval(interval);
-  }, [isHovered, thumbnails.length]);
-
-  const handleThumbnailsGenerated = (newThumbnails: string[]) => {
-    setThumbnails(newThumbnails);
-  };
-
-  if (viewMode === 'list') {
-    return (
-      <div className="bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl p-4 hover:bg-white/15 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/20">
-        <div className="flex items-center gap-4">
-          <div 
-            className="relative w-24 h-14 rounded-lg overflow-hidden bg-gradient-to-br from-purple-500/20 to-pink-500/20 flex-shrink-0"
-            onMouseEnter={() => setIsHovered(true)}
-            onMouseLeave={() => {
-              setIsHovered(false);
-              setCurrentThumbnail(0);
-            }}
-          >
-            {thumbnails.length > 0 ? (
-              <img
-                src={thumbnails[currentThumbnail]}
-                alt={`${video.name} thumbnail`}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <FileVideo className="w-6 h-6 text-white/60" />
-              </div>
-            )}
-            {thumbnails.length > 1 && isHovered && (
-              <div className="absolute bottom-1 right-1 flex gap-0.5">
-                {thumbnails.map((_, index) => (
-                  <div
-                    key={index}
-                    className={`w-1 h-1 rounded-full ${
-                      index === currentThumbnail ? 'bg-white' : 'bg-white/40'
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-          
-          <div className="flex-1 min-w-0">
-            <h3 className="text-white font-medium text-sm truncate">{video.name}</h3>
-            <div className="flex items-center gap-4 mt-1 text-xs text-white/60">
-              {video.size && <span>{video.size}</span>}
-              {video.lastModified && <span>{video.lastModified}</span>}
-            </div>
-          </div>
-          
-          <button
-            onClick={() => onDownload(video)}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white p-2 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-        </div>
-        
-        <ThumbnailGenerator
-          videoUrl={video.url}
-          onThumbnailsGenerated={handleThumbnailsGenerated}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="group bg-white/10 backdrop-blur-sm border border-white/20 rounded-xl overflow-hidden hover:bg-white/15 transition-all duration-300 hover:shadow-xl hover:shadow-purple-500/20 hover:scale-[1.02]">
-      <div 
-        className="relative aspect-video bg-gradient-to-br from-purple-500/20 to-pink-500/20 overflow-hidden"
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => {
-          setIsHovered(false);
-          setCurrentThumbnail(0);
-        }}
-      >
-        {thumbnails.length > 0 ? (
-          <img
-            src={thumbnails[currentThumbnail]}
-            alt={`${video.name} thumbnail`}
-            className="w-full h-full object-cover transition-all duration-300"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center">
-            <FileVideo className="w-12 h-12 text-white/60" />
-          </div>
-        )}
-        
-        {thumbnails.length > 1 && isHovered && (
-          <div className="absolute bottom-3 left-1/2 transform -translate-x-1/2 flex gap-1">
-            {thumbnails.map((_, index) => (
-              <div
-                key={index}
-                className={`w-2 h-2 rounded-full transition-all duration-200 ${
-                  index === currentThumbnail ? 'bg-white scale-110' : 'bg-white/50'
-                }`}
-              />
-            ))}
-          </div>
-        )}
-        
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center">
-          <button
-            onClick={() => onDownload(video)}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white p-3 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 shadow-lg"
-          >
-            <Download className="w-6 h-6" />
-          </button>
-        </div>
-      </div>
-      
-      <div className="p-4">
-        <h3 className="text-white font-medium text-sm mb-2 line-clamp-2 leading-tight">
-          {video.name}
-        </h3>
-        <div className="flex items-center justify-between text-xs text-white/60">
-          <div className="flex flex-col gap-1">
-            {video.size && <span>{video.size}</span>}
-            {video.lastModified && <span>{video.lastModified}</span>}
-          </div>
-        </div>
-      </div>
-      
-      <ThumbnailGenerator
-        videoUrl={video.url}
-        onThumbnailsGenerated={handleThumbnailsGenerated}
-      />
-    </div>
-  );
-};
-
-const S3VideoDownloader: React.FC = () => {
+export const S3VideoDownloader: React.FC = () => {
   const [password, setPassword] = useState('');
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -229,55 +12,9 @@ const S3VideoDownloader: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // S3から動画リスト取得
- const fetchFiles = async (pwd: string) => {
-  setIsLoading(true);
-  setError(null);
-  try {
-    const client = new S3Client({
-      region: import.meta.env.VITE_AWS_REGION,
-      credentials: {
-        accessKeyId: import.meta.env.VITE_AWS_ACCESS_KEY_ID,
-        secretAccessKey: import.meta.env.VITE_AWS_SECRET_ACCESS_KEY
-      }
-    });
-    const command = new ListObjectsV2Command({
-      Bucket: import.meta.env.VITE_AWS_BUCKET_NAME,
-      Prefix: `${pwd}/`
-    });
-    const response = await client.send(command);
-    const files = response.Contents?.filter(obj => obj.Key && obj.Key !== `${pwd}/`) || [];
-
-    // 署名付きURLを生成
-    const videoFiles: VideoFile[] = await Promise.all(
-      files.map(async obj => {
-        const key = obj.Key!;
-        const getObjectCommand = new GetObjectCommand({
-          Bucket: import.meta.env.VITE_AWS_BUCKET_NAME,
-          Key: key
-        });
-        const url = await getSignedUrl(client, getObjectCommand, { expiresIn: 3600 });
-        return {
-          name: key.replace(`${pwd}/`, ''),
-          url,
-          size: obj.Size ? `${(obj.Size / (1024 * 1024)).toFixed(1)} MB` : undefined,
-          lastModified: obj.LastModified?.toISOString().slice(0, 10)
-        };
-      })
-    );
-    setVideos(videoFiles);
-  } catch (err) {
-    setError(err instanceof Error ? err.message : '不明なエラーが発生しました');
-    setVideos([]);
-  } finally {
-    setIsLoading(false);
-  }
-};
-
-  // パスワード入力時にS3から動画リスト取得
   useEffect(() => {
     if (password) {
-      fetchFiles(password);
+      fetchFiles(password, setVideos, setIsLoading, setError);
     } else {
       setVideos([]);
     }
@@ -316,39 +53,39 @@ const S3VideoDownloader: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900">
       {/* Header */}
       <div className="bg-black/20 backdrop-blur-sm border-b border-white/10">
-        <div className="max-w-6xl mx-auto px-6 py-6">
+        <div className="max-w-6xl w-full mx-auto sm:px-4 px-2 py-6">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold text-white mb-2">
+              <h1 className="sm:text-3xl text-2xl font-bold text-white mb-2">
                 S3 Video Library
               </h1>
-              <p className="text-white/70">
+              <p className="text-white/70 text-sm sm:text-base">
                 動画ファイルをプレビューしてダウンロード
               </p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto">
               {/* パスワード入力欄 */}
               <input
                 type="password"
                 placeholder="パスワードを入力"
                 value={password}
                 onChange={e => setPassword(e.target.value)}
-                className="pl-4 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
+                className="pl-4 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm w-full sm:w-auto"
               />
-              <div className="relative">
+              <div className="relative w-full sm:w-auto">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 w-4 h-4" />
                 <input
                   type="text"
                   placeholder="動画を検索..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm"
+                  className="pl-10 pr-4 py-2 bg-white/10 border border-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent backdrop-blur-sm w-full sm:w-auto"
                   disabled={!password}
                 />
               </div>
               
-              <div className="flex items-center gap-1 bg-white/10 p-1 rounded-lg">
+              <div className="flex items-center gap-1 bg-white/10 p-1 rounded-lg self-center">
                 <button
                   onClick={() => setViewMode('grid')}
                   className={`p-2 rounded transition-colors ${
@@ -378,7 +115,7 @@ const S3VideoDownloader: React.FC = () => {
       </div>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto px-6 py-8">
+      <div className="max-w-6xl w-full mx-auto sm:px-4 px-2 py-8">
         {!password ? (
           <div className="text-center py-12">
             <FileVideo className="w-16 h-16 text-white/40 mx-auto mb-4" />
@@ -419,7 +156,7 @@ const S3VideoDownloader: React.FC = () => {
 
             <div className={
               viewMode === 'grid' 
-                ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+                ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
                 : "space-y-4"
             }>
               {filteredVideos.map((video, index) => (
@@ -440,6 +177,4 @@ const S3VideoDownloader: React.FC = () => {
       </div>
     </div>
   );
-  };
-
-export default S3VideoDownloader;
+};
