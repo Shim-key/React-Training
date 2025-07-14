@@ -88,9 +88,9 @@ export const S3VideoDownloader: React.FC = () => {
               <div className="flex items-center gap-1 bg-white/10 p-1 rounded-lg self-center">
                 <button
                   onClick={() => setViewMode('grid')}
-                  className={`p-2 rounded transition-colors ${
+                  className={`p-2 rounded transition-colors bg-purple-500 ${
                     viewMode === 'grid' 
-                      ? 'bg-purple-500 text-white' 
+                      ? 'text-white' 
                       : 'hover:text-white hover:bg-white/10'
                   }`}
                   disabled={!password}
@@ -99,9 +99,9 @@ export const S3VideoDownloader: React.FC = () => {
                 </button>
                 <button
                   onClick={() => setViewMode('list')}
-                  className={`p-2 rounded transition-colors ${
+                  className={`p-2 rounded transition-colors bg-purple-500 ${
                     viewMode === 'list' 
-                      ? 'bg-purple-500 text-white' 
+                      ? 'text-white' 
                       : 'hover:text-white hover:bg-white/10'
                   }`}
                   disabled={!password}
