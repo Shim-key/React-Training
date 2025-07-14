@@ -57,10 +57,10 @@ export const S3VideoDownloader: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
               <h1 className="sm:text-3xl text-2xl font-bold text-white mb-2">
-                S3 Video Library
+                Mickory's Library
               </h1>
               <p className="text-white/70 text-sm sm:text-base">
-                動画ファイルをプレビューしてダウンロード
+                パスワードを入力してダウンロード
               </p>
             </div>
             
@@ -91,7 +91,7 @@ export const S3VideoDownloader: React.FC = () => {
                   className={`p-2 rounded transition-colors ${
                     viewMode === 'grid' 
                       ? 'bg-purple-500 text-white' 
-                      : 'text-white/60 hover:text-white hover:bg-white/10'
+                      : 'hover:text-white hover:bg-white/10'
                   }`}
                   disabled={!password}
                 >
@@ -102,7 +102,7 @@ export const S3VideoDownloader: React.FC = () => {
                   className={`p-2 rounded transition-colors ${
                     viewMode === 'list' 
                       ? 'bg-purple-500 text-white' 
-                      : 'text-white/60 hover:text-white hover:bg-white/10'
+                      : 'hover:text-white hover:bg-white/10'
                   }`}
                   disabled={!password}
                 >
