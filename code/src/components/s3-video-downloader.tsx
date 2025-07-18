@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FileVideo, Search, Grid, List } from 'lucide-react';
 import { VideoFile } from './interface';
 import { VideoCard } from './VideoCard';
@@ -11,9 +11,13 @@ export const S3VideoDownloader: React.FC = () => {
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [error, setError] = useState<string | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
+  const [elapsedTime, setElapsedTime] = useState<number>(0);
+  const [estimatedTime, setEstimatedTime] = useState<number | null>(null);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const startTimeRef = useRef<number>(0);
 
   useEffect(() => {
-    if (password) {
+    if (password && password.length === 16) {
       fetchFiles(password, setVideos, setError);
     } else {
       setVideos([]);
@@ -30,6 +34,15 @@ export const S3VideoDownloader: React.FC = () => {
   const handleDownload = async (video: VideoFile) => {
     try {
       setDownloadProgress(0);
+      setElapsedTime(0);
+      setEstimatedTime(null);
+      startTimeRef.current = Date.now();
+
+      // 経過時間タイマー開始
+      timerRef.current = setInterval(() => {
+        setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
+      }, 500);
+
       const response = await fetch(video.url);
       if (!response.ok) throw new Error('ファイルの取得に失敗しました');
       const contentLength = response.headers.get('content-length');
@@ -43,7 +56,19 @@ export const S3VideoDownloader: React.FC = () => {
         if (value) {
           chunks.push(value);
           received += value.length;
-          if (total) setDownloadProgress(Math.round((received / total) * 100));
+          if (total) {
+            const progress = Math.round((received / total) * 100);
+            setDownloadProgress(progress);
+
+            // 残り時間推定
+            const now = Date.now();
+            const elapsed = (now - startTimeRef.current) / 1000; // 秒
+            if (progress > 0) {
+              const estimatedTotal = elapsed / (progress / 100);
+              const remaining = estimatedTotal - elapsed;
+              setEstimatedTime(Math.max(0, Math.round(remaining)));
+            }
+          }
         }
       }
       const blob = new Blob(chunks);
@@ -60,6 +85,11 @@ export const S3VideoDownloader: React.FC = () => {
       alert('ダウンロードに失敗しました');
     } finally {
       setDownloadProgress(null);
+      setEstimatedTime(null);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+      setElapsedTime(0);
     }
   };
 
@@ -78,6 +108,10 @@ export const S3VideoDownloader: React.FC = () => {
               ></div>
             </div>
             <span className="text-purple-700">{downloadProgress}%</span>
+            <div className="mt-4 text-purple-700 text-sm">
+              経過時間: {elapsedTime}s<br />
+              残り時間(推定): {estimatedTime !== null ? `${estimatedTime}s` : '--'}
+            </div>
           </div>
         </div>
       )}
