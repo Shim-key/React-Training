@@ -8,7 +8,8 @@ export const VideoCard: React.FC<{
   video: VideoFile;
   onDownload: (video: VideoFile) => void;
   viewMode: 'grid' | 'list';
-}> = ({ video, onDownload, viewMode }) => {
+  onDirectDownload: (video: VideoFile) => void;
+}> = ({ video, onDownload, viewMode, onDirectDownload }) => {
   const [thumbnails, setThumbnails] = useState<string[]>([]);
   const [currentThumbnail, setCurrentThumbnail] = useState(0);
   const [isHovered, setIsHovered] = useState(false);
@@ -65,26 +66,30 @@ export const VideoCard: React.FC<{
             )}
           </div>
           
-          <div className="flex-1 min-w-0">
-            <h3 className="text-white font-medium text-sm truncate">{video.name}</h3>
-            <div className="flex items-center gap-4 mt-1 text-xs text-white/60">
-              {video.size && <span>{video.size}</span>}
-              {video.lastModified && <span>{video.lastModified}</span>}
-            </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-white font-medium text-sm truncate">{video.name}</h3>
+          <div className="flex items-center gap-4 mt-1 text-xs text-white/60">
+            {video.size && <span>{video.size}</span>}
+            {video.lastModified && <span>{video.lastModified}</span>}
           </div>
-          
-          <button
-            onClick={() => onDownload(video)}
-            className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white p-2 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95"
-          >
-            <Download className="w-4 h-4" />
-          </button>
         </div>
-        
-        <ThumbnailGenerator
-          videoUrl={video.url}
-          onThumbnailsGenerated={handleThumbnailsGenerated}
-        />
+        <button
+          onClick={() => onDownload(video)}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white p-2 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+        <button
+          className="ml-2 px-2 py-1 bg-blue-500 text-white rounded"
+          onClick={() => onDirectDownload(video)}
+        >
+          直接ダウンロード
+        </button>
+      </div>
+      <ThumbnailGenerator
+        videoUrl={video.url}
+        onThumbnailsGenerated={handleThumbnailsGenerated}
+      />
       </div>
     );
   }
@@ -134,22 +139,35 @@ export const VideoCard: React.FC<{
         </div>
       </div>
       
-      <div className="p-4">
-        <h3 className="text-white font-medium text-sm mb-2 line-clamp-2 leading-tight">
-          {video.name}
-        </h3>
-        <div className="flex items-center justify-between text-xs text-white/60">
-          <div className="flex flex-col gap-1">
-            {video.size && <span>{video.size}</span>}
-            {video.lastModified && <span>{video.lastModified}</span>}
-          </div>
+<div className="p-4">
+      <h3 className="text-white font-medium text-sm mb-2 line-clamp-2 leading-tight">
+        {video.name}
+      </h3>
+      <div className="flex items-center justify-between text-xs text-white/60">
+        <div className="flex flex-col gap-1">
+          {video.size && <span>{video.size}</span>}
+          {video.lastModified && <span>{video.lastModified}</span>}
         </div>
       </div>
-      
-      <ThumbnailGenerator
-        videoUrl={video.url}
-        onThumbnailsGenerated={handleThumbnailsGenerated}
-      />
+      <div className="flex gap-2 mt-2">
+        <button
+          onClick={() => onDownload(video)}
+          className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white p-2 rounded-lg transition-all duration-200 hover:scale-105 active:scale-95"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+        <button
+          className="px-2 py-1 bg-blue-500 text-white rounded"
+          onClick={() => onDirectDownload(video)}
+        >
+          直接ダウンロード
+        </button>
+      </div>
+    </div>
+    <ThumbnailGenerator
+      videoUrl={video.url}
+      onThumbnailsGenerated={handleThumbnailsGenerated}
+    />
     </div>
   );
 };

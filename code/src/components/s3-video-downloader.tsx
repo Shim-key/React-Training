@@ -93,6 +93,16 @@ export const S3VideoDownloader: React.FC = () => {
     }
   };
 
+  const handleDirectDownload = (video: VideoFile) => {
+    const a = document.createElement('a');
+    a.href = video.url;
+    a.download = video.name;
+    a.target = '_blank';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 pt-16">
@@ -177,6 +187,25 @@ export const S3VideoDownloader: React.FC = () => {
           </div>
         </div>
       </div>
+      <div className={
+  viewMode === 'grid' 
+    ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
+    : "space-y-4"
+}>
+  {filteredVideos.map((video, index) => (
+    <VideoCard
+      key={index}
+      video={{
+        ...video,
+        url: video.url
+      }}
+      onDownload={handleDownload}
+      onDirectDownload={handleDirectDownload} // 追加
+      viewMode={viewMode}
+    />
+  ))}
+</div>
+
 
       {/* Content */}
       <div className="max-w-6xl w-full mx-auto sm:px-4 px-2 py-8">
@@ -226,6 +255,7 @@ export const S3VideoDownloader: React.FC = () => {
                     url: video.url
                   }}
                   onDownload={handleDownload}
+                  onDirectDownload={handleDirectDownload}
                   viewMode={viewMode}
                 />
               ))}
