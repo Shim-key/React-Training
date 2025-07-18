@@ -192,18 +192,6 @@ export const S3VideoDownloader: React.FC = () => {
     ? "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
     : "space-y-4"
 }>
-  {filteredVideos.map((video, index) => (
-    <VideoCard
-      key={index}
-      video={{
-        ...video,
-        url: video.url
-      }}
-      onDownload={handleDownload}
-      onDirectDownload={handleDirectDownload} // 追加
-      viewMode={viewMode}
-    />
-  ))}
 </div>
 
 
