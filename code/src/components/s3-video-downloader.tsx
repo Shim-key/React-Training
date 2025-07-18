@@ -9,12 +9,12 @@ export const S3VideoDownloader: React.FC = () => {
   const [videos, setVideos] = useState<VideoFile[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
 
   useEffect(() => {
     if (password) {
-      fetchFiles(password, setVideos, setIsLoading, setError);
+      fetchFiles(password, setVideos, setError);
     } else {
       setVideos([]);
     }
@@ -29,10 +29,24 @@ export const S3VideoDownloader: React.FC = () => {
   // S3から動画をダウンロード
   const handleDownload = async (video: VideoFile) => {
     try {
-      setIsLoading(true);
+      setDownloadProgress(0);
       const response = await fetch(video.url);
       if (!response.ok) throw new Error('ファイルの取得に失敗しました');
-      const blob = await response.blob();
+      const contentLength = response.headers.get('content-length');
+      const total = contentLength ? parseInt(contentLength, 10) : 0;
+      const reader = response.body?.getReader();
+      let received = 0;
+      const chunks = [];
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.length;
+          if (total) setDownloadProgress(Math.round((received / total) * 100));
+        }
+      }
+      const blob = new Blob(chunks);
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -45,12 +59,28 @@ export const S3VideoDownloader: React.FC = () => {
       console.error('Download failed:', error);
       alert('ダウンロードに失敗しました');
     } finally {
-      setIsLoading(false);
+      setDownloadProgress(null);
     }
   };
 
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 pt-16">
+      {/* モーダル */}
+      {downloadProgress !== null && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-8 shadow-lg w-80 text-center">
+            <h3 className="text-lg font-bold mb-4 text-purple-700">ダウンロード中...</h3>
+            <div className="w-full bg-purple-100 rounded-full h-4 mb-4">
+              <div
+                className="bg-purple-500 h-4 rounded-full transition-all"
+                style={{ width: `${downloadProgress}%` }}
+              ></div>
+            </div>
+            <span className="text-purple-700">{downloadProgress}%</span>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <div className="bg-black/20 backdrop-blur-sm border-b border-white/10">
         <div className="max-w-6xl w-full mx-auto sm:px-4 px-2 py-6">
@@ -146,12 +176,6 @@ export const S3VideoDownloader: React.FC = () => {
               <h2 className="text-xl font-semibold text-white">
                 {filteredVideos.length} 件の動画
               </h2>
-              {isLoading && (
-                <div className="flex items-center gap-2 text-white/60">
-                  <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin"></div>
-                  <span>ダウンロード中...</span>
-                </div>
-              )}
             </div>
 
             <div className={
